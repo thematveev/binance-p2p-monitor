@@ -1,0 +1,45 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            # Fix git ownership
+            git config --global --add safe.directory /opt/binance-p2p-monitor 2>/dev/null || true
+
+            # Pull latest code
+            git -C /opt/binance-p2p-monitor pull --ff-only
+
+            # Patch script paths (idempotent)
+            sed -i "s|CSV_FILE = \"binance_p2p_uah_usdt.csv\"|CSV_FILE = \"/var/lib/p2p-monitor/binance_p2p_uah_usdt.csv\"|" /opt/binance-p2p-monitor/binance_p2p_monitor.py 2>/dev/null || true
+            sed -i "s|LOG_FILE = \"binance_p2p_monitor.log\"|LOG_FILE = \"/var/log/p2p-monitor/binance_p2p_monitor.log\"|" /opt/binance-p2p-monitor/binance_p2p_monitor.py 2>/dev/null || true
+
+            # Update dashboard
+            cp /opt/binance-p2p-monitor/p2p-dashboard.html /var/www/p2p-monitor/index.html
+
+            # Restart services
+            systemctl restart p2p-monitor
+            systemctl reload-or-restart nginx
+
+            # Self-check
+            sleep 2
+            systemctl is-active p2p-monitor && echo "✔ Monitor running" || echo "✘ Monitor failed"
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost)
+            echo "HTTP check: $HTTP"

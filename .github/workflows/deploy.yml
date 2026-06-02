@@ -9,9 +9,6 @@ jobs:
   deploy:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -21,25 +18,25 @@ jobs:
           script: |
             set -e
 
-            # Fix git ownership
-            git config --global --add safe.directory /opt/binance-p2p-monitor 2>/dev/null || true
+            # Fix git ownership and pull as root
+            sudo git config --global --add safe.directory /opt/binance-p2p-monitor 2>/dev/null || true
+            sudo git -C /opt/binance-p2p-monitor fetch --all
+            sudo git -C /opt/binance-p2p-monitor reset --hard origin/main
 
-            # Pull latest code
-            git -C /opt/binance-p2p-monitor pull --ff-only
-
-            # Patch script paths (idempotent)
-            sed -i "s|CSV_FILE = \"binance_p2p_uah_usdt.csv\"|CSV_FILE = \"/var/lib/p2p-monitor/binance_p2p_uah_usdt.csv\"|" /opt/binance-p2p-monitor/binance_p2p_monitor.py 2>/dev/null || true
-            sed -i "s|LOG_FILE = \"binance_p2p_monitor.log\"|LOG_FILE = \"/var/log/p2p-monitor/binance_p2p_monitor.log\"|" /opt/binance-p2p-monitor/binance_p2p_monitor.py 2>/dev/null || true
+            # Patch paths (idempotent)
+            sudo sed -i 's|CSV_FILE = "binance_p2p_uah_usdt.csv"|CSV_FILE = "/var/lib/p2p-monitor/binance_p2p_uah_usdt.csv"|' /opt/binance-p2p-monitor/binance_p2p_monitor.py 2>/dev/null || true
+            sudo sed -i 's|LOG_FILE = "binance_p2p_monitor.log"|LOG_FILE = "/var/log/p2p-monitor/binance_p2p_monitor.log"|' /opt/binance-p2p-monitor/binance_p2p_monitor.py 2>/dev/null || true
 
             # Update dashboard
-            cp /opt/binance-p2p-monitor/p2p-dashboard.html /var/www/p2p-monitor/index.html
+            sudo cp /opt/binance-p2p-monitor/p2p-dashboard.html /var/www/p2p-monitor/index.html
 
             # Restart services
-            systemctl restart p2p-monitor
-            systemctl reload-or-restart nginx
+            sudo systemctl restart p2p-monitor
+            sudo systemctl reload nginx
 
             # Self-check
-            sleep 2
-            systemctl is-active p2p-monitor && echo "✔ Monitor running" || echo "✘ Monitor failed"
+            sleep 3
+            sudo systemctl is-active p2p-monitor && echo "Monitor: OK" || echo "Monitor: FAILED"
             HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost)
-            echo "HTTP check: $HTTP"
+            echo "HTTP localhost: $HTTP"
+            [ "$HTTP" = "200" ] && echo "SUCCESS - dashboard is live!" || echo "WARNING - HTTP not 200"

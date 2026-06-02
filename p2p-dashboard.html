@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>P2P Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@300..700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+/* === TOKENS === */
+:root,[data-theme="light"]{
+  --color-bg:#f7f6f2;--color-surface:#f9f8f5;--color-surface-2:#fbfbf9;
+  --color-surface-offset:#f3f0ec;--color-surface-dynamic:#e6e4df;
+  --color-divider:#dcd9d5;--color-border:#d4d1ca;
+  --color-text:#28251d;--color-text-muted:#7a7974;--color-text-faint:#bab9b4;
+  --color-primary:#01696f;--color-primary-hover:#0c4e54;
+  --color-primary-highlight:#cedcd8;
+  --color-success:#437a22;--color-success-highlight:#d4dfcc;
+  --color-error:#a12c7b;--color-error-highlight:#e0ced7;
+  --color-gold:#d19900;--color-blue:#006494;--color-orange:#da7101;
+  --color-buy:#437a22;--color-sell:#006494;--color-spread:#d19900;
+  --radius-sm:0.375rem;--radius-md:0.5rem;--radius-lg:0.75rem;--radius-xl:1rem;--radius-full:9999px;
+  --shadow-sm:0 1px 2px oklch(0.2 0.01 80/0.06);--shadow-md:0 4px 12px oklch(0.2 0.01 80/0.08);
+  --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-5:1.25rem;--space-6:1.5rem;
+  --space-8:2rem;--space-10:2.5rem;--space-12:3rem;--space-16:4rem;
+  --text-xs:clamp(.75rem,.7rem + .25vw,.875rem);--text-sm:clamp(.875rem,.8rem + .35vw,1rem);
+  --text-base:clamp(1rem,.95rem + .25vw,1.125rem);--text-lg:clamp(1.125rem,1rem + .75vw,1.5rem);
+  --text-xl:clamp(1.5rem,1.2rem + 1.25vw,2.25rem);
+  --font-body:'Geist','Inter',sans-serif;--font-mono:'Geist Mono','Fira Mono',monospace;
+  --transition:180ms cubic-bezier(.16,1,.3,1);
+  --chart-grid:rgba(40,37,29,.08);
+}
+[data-theme="dark"]{
+  --color-bg:#171614;--color-surface:#1c1b19;--color-surface-2:#201f1d;
+  --color-surface-offset:#1d1c1a;--color-surface-dynamic:#2d2c2a;
+  --color-divider:#262523;--color-border:#393836;
+  --color-text:#cdccca;--color-text-muted:#797876;--color-text-faint:#5a5957;
+  --color-primary:#4f98a3;--color-primary-hover:#227f8b;--color-primary-highlight:#313b3b;
+  --color-success:#6daa45;--color-success-highlight:#3a4435;
+  --color-error:#d163a7;--color-error-highlight:#4c3d46;
+  --color-gold:#e8af34;--color-blue:#5591c7;--color-orange:#fdab43;
+  --color-buy:#6daa45;--color-sell:#5591c7;--color-spread:#e8af34;
+  --shadow-sm:0 1px 2px oklch(0 0 0/.2);--shadow-md:0 4px 12px oklch(0 0 0/.3);
+  --chart-grid:rgba(205,204,202,.06);
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme]){
+  --color-bg:#171614;--color-surface:#1c1b19;--color-surface-2:#201f1d;
+  --color-surface-offset:#1d1c1a;--color-surface-dynamic:#2d2c2a;
+  --color-divider:#262523;--color-border:#393836;
+  --color-text:#cdccca;--color-text-muted:#797876;--color-text-faint:#5a5957;
+  --color-primary:#4f98a3;--color-buy:#6daa45;--color-sell:#5591c7;--color-spread:#e8af34;
+  --chart-grid:rgba(205,204,202,.06);
+}}
+
+/* === RESET === */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;scroll-behavior:smooth}
+body{min-height:100dvh;font-family:var(--font-body);font-size:var(--text-base);color:var(--color-text);background:var(--color-bg);line-height:1.6}
+button{cursor:pointer;background:none;border:none;font:inherit;color:inherit}
+input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;border-radius:var(--radius-sm)}
+a,button,[role="button"],input,select{transition:color var(--transition),background var(--transition),border-color var(--transition),box-shadow var(--transition),opacity var(--transition)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* === LAYOUT === */
+.app{display:grid;grid-template-rows:56px 1fr;min-height:100dvh}
+header{display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-6);background:var(--color-surface);border-bottom:1px solid var(--color-border);position:sticky;top:0;z-index:100;gap:var(--space-4)}
+.logo{display:flex;align-items:center;gap:var(--space-3);font-weight:600;font-size:var(--text-sm);white-space:nowrap}
+.logo svg{flex-shrink:0;color:var(--color-primary)}
+.header-right{display:flex;align-items:center;gap:var(--space-3)}
+main{padding:var(--space-6);max-width:1400px;margin-inline:auto;width:100%;display:flex;flex-direction:column;gap:var(--space-6)}
+
+/* === KPI CARDS === */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--space-4)}
+.kpi-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-5);box-shadow:var(--shadow-sm)}
+.kpi-label{font-size:var(--text-xs);color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--space-2)}
+.kpi-value{font-family:var(--font-mono);font-size:var(--text-lg);font-weight:500;line-height:1.2;color:var(--color-text)}
+.kpi-value.buy{color:var(--color-buy)}
+.kpi-value.sell{color:var(--color-sell)}
+.kpi-value.spread{color:var(--color-spread)}
+.kpi-sub{font-size:var(--text-xs);color:var(--color-text-faint);margin-top:var(--space-1)}
+
+/* === CONTROLS === */
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
+.controls-label{font-size:var(--text-sm);color:var(--color-text-muted);white-space:nowrap}
+.pay-toggles{display:flex;gap:var(--space-2);flex-wrap:wrap}
+.pay-toggle{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-full);border:1px solid var(--color-border);font-size:var(--text-sm);cursor:pointer;user-select:none;background:var(--color-surface)}
+.pay-toggle input{display:none}
+.pay-toggle.active{background:var(--color-primary-highlight);border-color:var(--color-primary);color:var(--color-primary)}
+[data-theme="dark"] .pay-toggle.active{color:var(--color-primary);border-color:var(--color-primary)}
+.pay-dot{width:8px;height:8px;border-radius:var(--radius-full);background:currentColor;opacity:.7}
+.controls-sep{width:1px;height:20px;background:var(--color-border);margin:0 var(--space-1)}
+.range-btns{display:flex;gap:var(--space-1)}
+.range-btn{padding:var(--space-1) var(--space-3);border-radius:var(--radius-md);font-size:var(--text-xs);border:1px solid var(--color-border);background:var(--color-surface);color:var(--color-text-muted)}
+.range-btn.active{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+.btn-upload{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);border-radius:var(--radius-md);border:1px solid var(--color-border);background:var(--color-surface);font-size:var(--text-sm);color:var(--color-text-muted);margin-left:auto}
+.btn-upload:hover{border-color:var(--color-primary);color:var(--color-primary)}
+
+/* === CHARTS === */
+.charts-grid{display:grid;grid-template-columns:1fr;gap:var(--space-6)}
+@media(min-width:900px){.charts-grid{grid-template-columns:1fr 1fr}}
+.chart-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-5);box-shadow:var(--shadow-sm)}
+.chart-card.full{grid-column:1/-1}
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)}
+.chart-title{font-size:var(--text-sm);font-weight:600;color:var(--color-text)}
+.chart-legend{display:flex;gap:var(--space-4);flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-xs);color:var(--color-text-muted)}
+.legend-dot{width:8px;height:8px;border-radius:var(--radius-full)}
+.chart-wrap{position:relative;height:260px}
+.chart-wrap.tall{height:200px}
+
+/* === TABLE === */
+.table-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
+.table-header{padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-divider);display:flex;align-items:center;justify-content:space-between}
+.table-title{font-size:var(--text-sm);font-weight:600}
+.table-count{font-size:var(--text-xs);color:var(--color-text-faint);font-family:var(--font-mono)}
+.table-scroll{overflow-x:auto;max-height:280px;overflow-y:auto}
+table{width:100%;border-collapse:collapse}
+thead th{padding:var(--space-2) var(--space-4);font-size:var(--text-xs);color:var(--color-text-muted);text-align:left;text-transform:uppercase;letter-spacing:.06em;position:sticky;top:0;background:var(--color-surface);border-bottom:1px solid var(--color-divider);font-weight:500}
+tbody tr{border-bottom:1px solid var(--color-divider)}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--color-surface-offset)}
+tbody td{padding:var(--space-2) var(--space-4);font-size:var(--text-sm);font-family:var(--font-mono)}
+.td-time{color:var(--color-text-muted);font-size:var(--text-xs)}
+.td-buy{color:var(--color-buy)}
+.td-sell{color:var(--color-sell)}
+.td-spread{color:var(--color-spread)}
+
+/* === STATUS BAR === */
+.status-bar{display:flex;align-items:center;gap:var(--space-3);font-size:var(--text-xs);color:var(--color-text-faint)}
+.status-dot{width:7px;height:7px;border-radius:var(--radius-full);background:var(--color-text-faint)}
+.status-dot.live{background:var(--color-success);box-shadow:0 0 0 3px color-mix(in oklch,var(--color-success) 25%,transparent)}
+.status-dot.error{background:var(--color-error)}
+
+/* === THEME TOGGLE === */
+.theme-toggle{width:36px;height:36px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;color:var(--color-text-muted);border:1px solid var(--color-border)}
+.theme-toggle:hover{color:var(--color-text);border-color:var(--color-text-muted)}
+
+/* === EMPTY STATE === */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:var(--space-16) var(--space-8);text-align:center;color:var(--color-text-muted);gap:var(--space-3)}
+.empty-icon{color:var(--color-text-faint)}
+.empty-title{font-size:var(--text-sm);font-weight:600;color:var(--color-text)}
+.empty-desc{font-size:var(--text-sm);max-width:36ch}
+
+/* === RESPONSIVE === */
+@media(max-width:640px){
+  main{padding:var(--space-4);gap:var(--space-4)}
+  .chart-wrap{height:200px}
+  header{padding:0 var(--space-4)}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <svg aria-label="P2P Monitor logo" width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="6" width="10" height="7" rx="1.5"/>
+      <rect x="16" y="15" width="10" height="7" rx="1.5"/>
+      <path d="M12 9.5h3l3-3M16 18.5h-3l-3 3"/>
+    </svg>
+    <span>P2P Monitor</span>
+    <span style="color:var(--color-text-faint);font-weight:400">UAH / USDT</span>
+  </div>
+
+  <div class="header-right">
+    <div class="status-bar">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">No data</span>
+    </div>
+    <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main>
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-label">Latest Buy Price</div>
+      <div class="kpi-value buy" id="kpiBuy">—</div>
+      <div class="kpi-sub">UAH per USDT (sell your USDT)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Latest Sell Price</div>
+      <div class="kpi-value sell" id="kpiSell">—</div>
+      <div class="kpi-sub">UAH per USDT (buy USDT)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Current Spread</div>
+      <div class="kpi-value spread" id="kpiSpread">—</div>
+      <div class="kpi-sub">sell − buy (UAH)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Avg Spread</div>
+      <div class="kpi-value" id="kpiAvgSpread">—</div>
+      <div class="kpi-sub">over visible range</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Data Points</div>
+      <div class="kpi-value" id="kpiCount" style="font-family:var(--font-mono)">0</div>
+      <div class="kpi-sub">records loaded</div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <span class="controls-label">Payment methods</span>
+    <div class="pay-toggles" id="payToggles">
+      <!-- injected by JS -->
+    </div>
+    <div class="controls-sep"></div>
+    <span class="controls-label">Range</span>
+    <div class="range-btns">
+      <button class="range-btn" data-range="30">30m</button>
+      <button class="range-btn" data-range="60">1h</button>
+      <button class="range-btn" data-range="180">3h</button>
+      <button class="range-btn active" data-range="0">All</button>
+    </div>
+    <div class="controls-sep"></div>
+    <label class="btn-upload" for="csvInput">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Load CSV
+      <input type="file" id="csvInput" accept=".csv" style="display:none"/>
+    </label>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-grid">
+
+    <!-- Price over time -->
+    <div class="chart-card full">
+      <div class="chart-header">
+        <span class="chart-title">Buy &amp; Sell prices over time</span>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--color-buy)"></div>Buy price</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--color-sell)"></div>Sell price</div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Spread over time -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Spread over time</span>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--color-spread)"></div>Spread (UAH)</div>
+        </div>
+      </div>
+      <div class="chart-wrap tall">
+        <canvas id="spreadChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Spread distribution -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Spread distribution</span>
+      </div>
+      <div class="chart-wrap tall">
+        <canvas id="histChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Recent records</span>
+      <span class="table-count" id="tableCount">0 rows</span>
+    </div>
+    <div class="table-scroll" id="tableScroll">
+      <div class="empty-state" id="emptyState">
+        <svg class="empty-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <div class="empty-title">No CSV loaded yet</div>
+        <div class="empty-desc">Click "Load CSV" above to load your <code>binance_p2p_uah_usdt.csv</code> file and visualise the data.</div>
+      </div>
+      <table id="dataTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Buy price</th>
+            <th>Sell price</th>
+            <th>Spread</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+(function(){
+  const btn = document.querySelector('[data-theme-toggle]');
+  const root = document.documentElement;
+  let theme = root.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+  root.setAttribute('data-theme', theme);
+  function updateIcon(){
+    btn.innerHTML = theme === 'dark'
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
+  updateIcon();
+  btn.addEventListener('click', () => {
+    theme = theme === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', theme);
+    updateIcon();
+    if(priceChart) updateChartColors();
+  });
+})();
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let allRows = [];            // { time:Date, buy:float, sell:float, spread:float, payType:string }
+let activePayTypes = new Set(['PrivatBank','Monobank','All']);
+let activeRange = 0;         // minutes, 0 = all
+let priceChart, spreadChart, histChart;
+
+// ── CSV parser ────────────────────────────────────────────────────────────────
+document.getElementById('csvInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    parseCSV(ev.target.result, file.name);
+  };
+  reader.readAsText(file);
+  this.value = '';
+});
+
+function parseCSV(text, filename){
+  const lines = text.trim().split('\n');
+  if(lines.length < 2){ alert('CSV appears empty or malformed.'); return; }
+
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const timeIdx   = headers.findIndex(h => h === 'time');
+  const buyIdx    = headers.findIndex(h => h.includes('buy'));
+  const sellIdx   = headers.findIndex(h => h.includes('sell'));
+
+  if(timeIdx < 0 || buyIdx < 0 || sellIdx < 0){
+    alert('CSV must have columns: time, buy_price_uah, sell_price_uah');
+    return;
+  }
+
+  // detect pay type from filename or default to "All"
+  let payType = 'All';
+  if(/privat/i.test(filename)) payType = 'PrivatBank';
+  else if(/mono/i.test(filename)) payType = 'Monobank';
+
+  const parsed = [];
+  for(let i = 1; i < lines.length; i++){
+    const cols = lines[i].split(',');
+    if(cols.length < 3) continue;
+    const t = new Date(cols[timeIdx].trim());
+    const buy  = parseFloat(cols[buyIdx].trim());
+    const sell = parseFloat(cols[sellIdx].trim());
+    if(isNaN(t.getTime()) || isNaN(buy) || isNaN(sell)) continue;
+    parsed.push({ time: t, buy, sell, spread: parseFloat((sell - buy).toFixed(4)), payType });
+  }
+
+  if(!parsed.length){ alert('No valid rows found in CSV.'); return; }
+
+  // merge with existing data
+  allRows = [...allRows, ...parsed].sort((a,b) => a.time - b.time);
+
+  // update pay type filters
+  const types = [...new Set(allRows.map(r => r.payType))];
+  rebuildPayToggles(types);
+
+  setStatus('live', `${allRows.length} records — last: ${formatTime(allRows[allRows.length-1].time)}`);
+  render();
+}
+
+// ── Pay type toggles ──────────────────────────────────────────────────────────
+function rebuildPayToggles(types){
+  const container = document.getElementById('payToggles');
+  container.innerHTML = '';
+  const allTypes = types.length > 1 ? ['All', ...types] : types;
+  allTypes.forEach(type => {
+    const lbl = document.createElement('label');
+    lbl.className = 'pay-toggle' + (activePayTypes.has(type) ? ' active' : '');
+    lbl.innerHTML = `<input type="checkbox" ${activePayTypes.has(type)?'checked':''}/>
+      <span class="pay-dot"></span>${type}`;
+    lbl.addEventListener('click', (e)=>{
+      e.preventDefault();
+      if(type === 'All'){
+        if(activePayTypes.has('All')){
+          activePayTypes.clear();
+        } else {
+          activePayTypes = new Set(['All', ...types]);
+        }
+      } else {
+        if(activePayTypes.has(type)) activePayTypes.delete(type);
+        else activePayTypes.add(type);
+        // sync All
+        if(activePayTypes.size === types.length) activePayTypes.add('All');
+        else activePayTypes.delete('All');
+      }
+      // update UI
+      container.querySelectorAll('.pay-toggle').forEach((el, i) => {
+        const t = allTypes[i];
+        el.classList.toggle('active', activePayTypes.has(t));
+      });
+      render();
+    });
+    container.appendChild(lbl);
+  });
+}
+
+// ── Range buttons ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.range-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeRange = parseInt(btn.dataset.range);
+    render();
+  });
+});
+
+// ── Filter rows ───────────────────────────────────────────────────────────────
+function getFilteredRows(){
+  let rows = allRows;
+
+  // pay type
+  const types = [...activePayTypes].filter(t => t !== 'All');
+  if(types.length > 0 && !activePayTypes.has('All')){
+    rows = rows.filter(r => types.includes(r.payType));
+  }
+
+  // time range
+  if(activeRange > 0){
+    const cutoff = new Date(Date.now() - activeRange * 60 * 1000);
+    const latest = rows[rows.length-1]?.time;
+    if(latest){
+      const from = new Date(latest.getTime() - activeRange * 60 * 1000);
+      rows = rows.filter(r => r.time >= from);
+    }
+  }
+
+  return rows;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render(){
+  const rows = getFilteredRows();
+  updateKPIs(rows);
+  updateCharts(rows);
+  updateTable(rows);
+}
+
+function updateKPIs(rows){
+  if(!rows.length){
+    ['kpiBuy','kpiSell','kpiSpread','kpiAvgSpread'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('kpiCount').textContent = allRows.length;
+    return;
+  }
+  const last = rows[rows.length - 1];
+  document.getElementById('kpiBuy').textContent   = last.buy.toFixed(2);
+  document.getElementById('kpiSell').textContent  = last.sell.toFixed(2);
+  document.getElementById('kpiSpread').textContent = last.spread.toFixed(4);
+  const avgSpread = (rows.reduce((s,r)=>s+r.spread,0)/rows.length).toFixed(4);
+  document.getElementById('kpiAvgSpread').textContent = avgSpread;
+  document.getElementById('kpiCount').textContent = allRows.length;
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+function getCSSVar(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function chartDefaults(){
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction:{ mode:'index', intersect:false },
+    plugins:{
+      legend:{ display:false },
+      tooltip:{
+        backgroundColor: getCSSVar('--color-surface-2') || '#201f1d',
+        borderColor: getCSSVar('--color-border'),
+        borderWidth:1,
+        titleColor: getCSSVar('--color-text-muted'),
+        bodyColor: getCSSVar('--color-text'),
+        padding:10,
+        titleFont:{ family:'Geist Mono', size:11 },
+        bodyFont:{ family:'Geist Mono', size:12 },
+      }
+    },
+    scales:{
+      x:{
+        type:'time',
+        time:{ tooltipFormat:'HH:mm:ss', displayFormats:{ minute:'HH:mm', hour:'HH:mm' }},
+        grid:{ color: getCSSVar('--chart-grid') },
+        ticks:{ color: getCSSVar('--color-text-faint'), font:{ size:11, family:'Geist Mono' }, maxRotation:0 },
+        border:{ color: getCSSVar('--color-border') }
+      },
+      y:{
+        grid:{ color: getCSSVar('--chart-grid') },
+        ticks:{ color: getCSSVar('--color-text-faint'), font:{ size:11, family:'Geist Mono' } },
+        border:{ color: getCSSVar('--color-border') }
+      }
+    }
+  };
+}
+
+function initCharts(){
+  const buyColor  = getCSSVar('--color-buy');
+  const sellColor = getCSSVar('--color-sell');
+  const spreadColor = getCSSVar('--color-spread');
+
+  // Price chart
+  priceChart = new Chart(document.getElementById('priceChart'), {
+    type:'line',
+    data:{
+      datasets:[
+        { label:'Buy price', data:[], borderColor: buyColor, backgroundColor: buyColor+'22',
+          borderWidth:2, pointRadius:0, fill:false, tension:.3 },
+        { label:'Sell price', data:[], borderColor: sellColor, backgroundColor: sellColor+'22',
+          borderWidth:2, pointRadius:0, fill:false, tension:.3 }
+      ]
+    },
+    options:{ ...chartDefaults() }
+  });
+
+  // Spread chart
+  spreadChart = new Chart(document.getElementById('spreadChart'), {
+    type:'line',
+    data:{
+      datasets:[
+        { label:'Spread', data:[], borderColor: spreadColor, backgroundColor: spreadColor+'22',
+          borderWidth:2, pointRadius:0, fill:true, tension:.3 }
+      ]
+    },
+    options:{ ...chartDefaults() }
+  });
+
+  // Histogram
+  histChart = new Chart(document.getElementById('histChart'), {
+    type:'bar',
+    data:{ labels:[], datasets:[{ label:'Frequency', data:[], backgroundColor: spreadColor+'88', borderColor: spreadColor, borderWidth:1 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ bodyFont:{ family:'Geist Mono' }}},
+      scales:{
+        x:{ grid:{ color: getCSSVar('--chart-grid') }, ticks:{ color: getCSSVar('--color-text-faint'), font:{ size:10, family:'Geist Mono' }}},
+        y:{ grid:{ color: getCSSVar('--chart-grid') }, ticks:{ color: getCSSVar('--color-text-faint'), font:{ size:10, family:'Geist Mono' }, stepSize:1 }}
+      }
+    }
+  });
+}
+
+function updateChartColors(){
+  if(!priceChart) return;
+  const buyColor = getCSSVar('--color-buy');
+  const sellColor = getCSSVar('--color-sell');
+  const spreadColor = getCSSVar('--color-spread');
+  priceChart.data.datasets[0].borderColor = buyColor;
+  priceChart.data.datasets[0].backgroundColor = buyColor+'22';
+  priceChart.data.datasets[1].borderColor = sellColor;
+  priceChart.data.datasets[1].backgroundColor = sellColor+'22';
+  spreadChart.data.datasets[0].borderColor = spreadColor;
+  spreadChart.data.datasets[0].backgroundColor = spreadColor+'22';
+  histChart.data.datasets[0].backgroundColor = spreadColor+'88';
+  histChart.data.datasets[0].borderColor = spreadColor;
+  [priceChart, spreadChart, histChart].forEach(c => {
+    Object.values(c.options.scales).forEach(s => {
+      if(s.grid) s.grid.color = getCSSVar('--chart-grid');
+      if(s.ticks) s.ticks.color = getCSSVar('--color-text-faint');
+    });
+    c.update();
+  });
+}
+
+function updateCharts(rows){
+  if(!priceChart) return;
+  const pts = rows.map(r => ({ x: r.time, y: r.buy }));
+  const pts2 = rows.map(r => ({ x: r.time, y: r.sell }));
+  const pts3 = rows.map(r => ({ x: r.time, y: r.spread }));
+
+  priceChart.data.datasets[0].data = pts;
+  priceChart.data.datasets[1].data = pts2;
+  priceChart.update('none');
+
+  spreadChart.data.datasets[0].data = pts3;
+  spreadChart.update('none');
+
+  // histogram
+  updateHistogram(rows);
+}
+
+function updateHistogram(rows){
+  if(!rows.length){ histChart.data.labels=[]; histChart.data.datasets[0].data=[]; histChart.update('none'); return; }
+  const spreads = rows.map(r => r.spread);
+  const min = Math.min(...spreads), max = Math.max(...spreads);
+  const bins = 10;
+  const step = (max - min) / bins || 0.01;
+  const labels = [], counts = [];
+  for(let i=0;i<bins;i++){
+    const lo = min + i*step, hi = lo+step;
+    labels.push(lo.toFixed(2));
+    counts.push(spreads.filter(s => s>=lo && s<hi).length);
+  }
+  histChart.data.labels = labels;
+  histChart.data.datasets[0].data = counts;
+  histChart.update('none');
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+function updateTable(rows){
+  const empty = document.getElementById('emptyState');
+  const table = document.getElementById('dataTable');
+  const tbody = document.getElementById('tableBody');
+  const count = document.getElementById('tableCount');
+
+  if(!rows.length){
+    empty.style.display='';
+    table.style.display='none';
+    count.textContent = '0 rows';
+    return;
+  }
+
+  empty.style.display='none';
+  table.style.display='';
+  count.textContent = `${rows.length} rows`;
+
+  // show last 100 rows reversed
+  const display = rows.slice(-100).reverse();
+  tbody.innerHTML = display.map(r => `
+    <tr>
+      <td class="td-time">${formatTime(r.time)}</td>
+      <td class="td-buy">${r.buy.toFixed(2)}</td>
+      <td class="td-sell">${r.sell.toFixed(2)}</td>
+      <td class="td-spread">${r.spread.toFixed(4)}</td>
+    </tr>
+  `).join('');
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function setStatus(state, text){
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot ' + state;
+  document.getElementById('statusText').textContent = text;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function formatTime(d){ return d.toLocaleTimeString('uk-UA', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) + ' ' + d.toLocaleDateString('uk-UA', { day:'2-digit', month:'2-digit' }); }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+initCharts();
+
+// ── Demo data (preloaded so dashboard isn't empty on first open) ───────────────
+(function injectDemo(){
+  const now = Date.now();
+  const base = 41.20;
+  const rows = [];
+  for(let i=60;i>=0;i--){
+    const t = new Date(now - i * 30000);
+    const noise = (Math.random() - 0.5) * 0.12;
+    const buy  = parseFloat((base + noise).toFixed(2));
+    const sell = parseFloat((base + 0.35 + noise * 0.5 + Math.random() * 0.05).toFixed(2));
+    rows.push({ time:t, buy, sell, spread: parseFloat((sell-buy).toFixed(4)), payType:'Demo' });
+  }
+  allRows = rows;
+  rebuildPayToggles(['Demo']);
+  setStatus('live', `Demo data — ${rows.length} records`);
+  render();
+})();
+</script>
+</body>
+</html>
